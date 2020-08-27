@@ -1305,9 +1305,9 @@
             [Parameter(Mandatory=$false, ParameterSetName="Individual", HelpMessage  = 'IsDHCP')] [bool] $IsDhcp = $false,
             [Parameter(Mandatory=$true, ParameterSetName="Individual", HelpMessage  = 'StaticIp')] [string] $StaticIp,
             [Parameter(Mandatory=$true, ParameterSetName="Individual", HelpMessage  = 'SubnetMask')] [string] $SubnetMask,
-            [Parameter(Mandatory=$true, ParameterSetName="Individual", HelpMessage  = 'Gateway')] [string] $Gateway,
-            [Parameter(Mandatory=$true, ParameterSetName="Individual", HelpMessage  = 'PrimaryDNS')] [string] $PrimaryDNS,
-            [Parameter(Mandatory=$true, ParameterSetName="Individual", HelpMessage  = 'SecondaryDns')] [string] $SecondaryDns,
+            [Parameter(Mandatory=$false, ParameterSetName="Individual", HelpMessage  = 'Gateway')] [string] $Gateway ="",
+            [Parameter(Mandatory=$false, ParameterSetName="Individual", HelpMessage  = 'PrimaryDNS')] [string] $PrimaryDNS ="",
+            [Parameter(Mandatory=$false, ParameterSetName="Individual", HelpMessage  = 'SecondaryDns')] [string] $SecondaryDns= "",
             [Parameter(Mandatory=$true, ParameterSetName="PSObject", HelpMessage  = 'VPGSetting VM NIC Network object')] [PSCustomObject] $VPGSettingVMNicNetworkHypervisorIpConfig
         )
 
@@ -1917,6 +1917,8 @@
         
         Set-SSLCertByPass
 
+        [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12;
+
         if ([String]::IsNullOrEmpty($ZertoServer) ) {
             throw "Missing Zerto Server"
         }
@@ -1936,6 +1938,8 @@
         }
         else {
             $cred = $ZertoCredentials
+            $ZertoUser = $($cred.UserName)
+            
         }
 
 
@@ -1946,10 +1950,18 @@
 
             # Authenticating with Zerto APIs - Basic AUTH over SSL
             $authInfo = ("{0}\{1}:{2}" -f  $cred.GetNetworkCredential().domain ,  $cred.GetNetworkCredential().UserName,  $cred.GetNetworkCredential().Password )
-            $authInfo = [System.Text.Encoding]::UTF8.GetBytes($authInfo)
+
+            Write-Verbose $authInfo
+
+            $authInfo = [System.Text.Encoding]::UTF8.GetBytes($authInfo)            
             $authInfo = [System.Convert]::ToBase64String($authInfo)
+
+      
+
             $headers = @{Authorization=("Basic {0}" -f $authInfo)}
-            $sessionBody = '{"AuthenticationMethod": "1"}'
+
+
+            $sessionBody = '{"AuthenticationMethod": "0"}'
 
             #Need to check our Response.
             try { 
@@ -3434,7 +3446,49 @@
             [Parameter(Mandatory=$false, HelpMessage = 'Zerto Server URL Port')] [string] $ZertoPort = ( Get-EnvZertoPort ),
             [Parameter(Mandatory=$false, ValueFromPipeline=$true, HelpMessage = 'Zerto authentication token from Get-ZertoAuthToken or ENV:\ZertoToken')] [Hashtable] $ZertoToken = ( Get-EnvZertoToken ),
             [Parameter(Mandatory=$true, HelpMessage = 'Zerto Site Identifier')] [string] $ZertoSiteIdentifier,
-            [Parameter(Mandatory=$false, ParameterSetName="ID", HelpMessage = 'Zerto Site ResourcePool Identifier')] [string] $ZertoSiteResourcePoolIdentifier
+            [Parameter(Mandatory=$false, ParameterSetName="ID", HelpMessage = 'Zerto Site ResourcePool Identifier')] [string] $ZertoSiteResourcePoolIdentifier            
+        )
+
+        $baseURL = "https://" + $ZertoServer + ":"+$ZertoPort+"/v1/"
+        $TypeJSON = "application/json"
+
+        if ( $ZertoToken -eq $null) {
+            throw "Missing Zerto Authentication Token"
+        }
+        if ([string]::IsNullOrEmpty($ZertoSiteIdentifier)  ) {
+            throw "Missing Zerto Site Identifier"
+        }
+
+        $FullURL = $baseURL + "virtualizationsites/" + $ZertoSiteIdentifier + "/resourcepools"
+        Write-Verbose $FullURL
+
+        try {
+            $Result = Invoke-RestMethod -Uri $FullURL -TimeoutSec 100 -Headers $ZertoToken -ContentType $TypeJSON
+        } catch {
+            Test-RESTError -err $_
+        }
+
+        #Filter by ID if needed
+        switch ($PsCmdlet.ParameterSetName) {
+            "ID" {
+                $Result = $Result | Where-Object {$_.ResourcePoolIdentifier -eq $ZertoSiteResourcePoolIdentifier} 
+            }            
+            Default {
+            }
+        }
+
+        return $Result
+    }
+
+    Function Get-ZertoSiteResourcePoolId {
+        [CmdletBinding()]
+        param(
+            [Parameter(Mandatory=$false, HelpMessage = 'Zerto Server or ENV:\ZertoServer')] [string] $ZertoServer = ( Get-EnvZertoServer )  ,
+            [Parameter(Mandatory=$false, HelpMessage = 'Zerto Server URL Port')] [string] $ZertoPort = ( Get-EnvZertoPort ),
+            [Parameter(Mandatory=$false, ValueFromPipeline=$true, HelpMessage = 'Zerto authentication token from Get-ZertoAuthToken or ENV:\ZertoToken')] [Hashtable] $ZertoToken = ( Get-EnvZertoToken ),
+            [Parameter(Mandatory=$true, HelpMessage = 'Zerto Site Identifier')] [string] $ZertoSiteIdentifier,
+            [Parameter(Mandatory=$false, ParameterSetName="ID", HelpMessage = 'Zerto Site ResourcePool Identifier')] [string] $ZertoSiteResourcePoolIdentifier,
+            [Parameter(Mandatory=$false, ParameterSetName="NAME", HelpMessage = 'Zerto Site ResourcePool Identifier')] [string] $ZertoSiteResourcePoolName
         )
 
         $baseURL = "https://" + $ZertoServer + ":"+$ZertoPort+"/v1/"
@@ -3461,12 +3515,16 @@
             "ID" {
                 $Result = $Result | Where-Object {$_.ResourcePoolIdentifier -eq $ZertoSiteResourcePoolIdentifier} 
             }
+            "NAME" {
+                $Result = $Result | Where-Object {$_.ResourcepoolName -eq $ZertoSiteResourcePoolName} 
+            }
             Default {
             }
         }
 
-        return $Result
+        return $($Result.ResourcePoolIdentifier)
     }
+
 
     # .ExternalHelp ZertoModule.psm1-help.xml
     Function Get-ZertoSiteVApp {
@@ -4762,6 +4820,7 @@
             [Parameter(Mandatory=$false, HelpMessage = 'Zerto Test Interval in minutes')] [ValidateRange(0,9999999)] [int] $TestIntervalInMinutes = 262080, 
             [Parameter(Mandatory=$false, HelpMessage = 'Host Cluster Name')] [string] $ClusterName, 
             [Parameter(Mandatory=$false, HelpMessage = 'Host Name')] [string] $HostName, 
+            [Parameter(Mandatory=$false, HelpMessage = 'ResourcePool Name')] [string] $ResourcePoolName, 
             [Parameter(Mandatory=$false, HelpMessage = 'Failover Network')] [string] $FailoverNetwork, 
             [Parameter(Mandatory=$false, HelpMessage = 'Failover Network ID')] [string] $FailoverNetworkID, 
             [Parameter(Mandatory=$false, HelpMessage = 'Test Network')] [string] $TestNetwork, 
@@ -4776,6 +4835,15 @@
             [Parameter(Mandatory=$false, HelpMessage = 'Zerto Journal Warning Threshold in MB')] [ValidateRange(0,9999999)] [int] $JournalWarningThresholdMB = 115200, 
             [Parameter(Mandatory=$false, HelpMessage = 'Zerto vCenter Folder')] [string] $Folder,
             [Parameter(Mandatory=$false, HelpMessage = 'Zerto vCenter Folder ID')] [string] $FolderID,
+            [Parameter(Mandatory=$false, HelpMessage = 'Zerto Zorg ID')] [string] $ZorgID,
+            [Parameter(Mandatory=$false, HelpMessage = 'Zerto Service  Profile ID')] [string] $ServiceProfileID,
+            [Parameter(Mandatory=$false, HelpMessage = 'Zerto Pre-Recovery Script')] [string] $PreRecoveryScript,
+            [Parameter(Mandatory=$false, HelpMessage = 'Zerto Post-Recovery Script')] [string] $PostRecoveryScript,
+            [Parameter(Mandatory=$false, HelpMessage = 'Zerto Post-Recovery Script Timeout')] [int] $PostRecoveryScriptTimeOut =0,
+            [Parameter(Mandatory=$false, HelpMessage = 'Zerto Pre-Recovery Script Timeout')] [int] $PreRecoveryScriptTimeOut =0,
+
+            
+            
 
             [Parameter(Mandatory=$true, ParameterSetName="VMNames", HelpMessage = 'Zerto Virtual Machine names')] [string[]] $VmNames,
             [Parameter(Mandatory=$true, ParameterSetName="VMClass", HelpMessage = 'Zerto VPG Virtual Machine class')] [VPGVirtualMachine[]] $VPGVirtualMachines
@@ -4800,8 +4868,10 @@
         if ($TestNetwork -and $TestNetworkID) {throw "Cannot specify both Test Network and Test Network ID"}
         if (-not $TestNetwork -and -not $TestNetworkID) {throw "Must specify either Test Network or Test Network ID"}
 
-        if ($HostName -and $ClusterName) {throw "Cannot specify both Host Name and Cluster Name"}
-        if (-not $HostName -and -not $ClusterName) {throw "Must specify either Host Name or Cluster Name"}
+        if ($HostName -and $ClusterName) {throw "Cannot specify Host Name and Cluster Name"}
+        if ($HostName -and $ResourcePoolName) {throw "Cannot specify Host Name and Resource Pool Name"}
+        if ($ClusterName -and $ResourcePoolName) {throw "Cannot specify Cluster Name and Resource Pool Name"}
+        if (-not $HostName -and -not $ClusterName -and -not $ResourcePoolName) {throw "Must specify either Host Name,Cluster Name or ResourcePool Name"}
 
         if ($DatastoreName -and $DatastoreClusterName) {throw "Cannot specify both Datastore Name and Datastore Cluster Name"}
         if (-not $DatastoreName -and -not $DatastoreclusterName) {throw "Must specify either Datastore Name or Datastore Cluster Name"}
@@ -4813,6 +4883,8 @@
         if ($Folder -and $FolderID) {throw "Cannot specify both Folder and Folder ID"}
         if (-not $Folder -and -not $FolderID) {throw "Must specify either Folder or Folder ID"}
 
+        if ($PreRecoveryScript -and $PreRecoveryScriptTimeOut -eq 0) { throw "Must specify a PreRecoveryScript timeout greater then 0"}
+        if ($PostRecoveryScript -and $PostRecoveryScriptTimeOut -eq 0) { throw "Must specify a PostRecoveryScript timeout greater then 0"}
 
         ### Temp validation
         #If ($DatastoreClusterName)  {throw "Cannot specify DatastoreClusterName as a default value for the VPG (bug in zerto 5.0)"}
@@ -4852,7 +4924,14 @@
             $HostID = Get-ZertoSiteHostID -ZertoServer $ZertoServer -ZertoPort $ZertoPort -ZertoToken $ZertoToken `
                                                      -ZertoSiteIdentifier $RecoverySiteID -HostName $HostName
             if ([string]::IsNullOrEmpty($HostID)  ) { throw "Could not find Host ID for $HostName " }
+        } elseif ($ResourcePoolName)
+        {
+            $ResourcePoolId = $null
+            $ResourcePoolId = Get-ZertoSiteResourcePoolId -ZertoServer $ZertoServer -ZertoPort $ZertoPort -ZertoToken $ZertoToken `
+                                                     -ZertoSiteIdentifier $RecoverySiteID -ZertoSiteResourcePoolName $ResourcePoolName
+            if ([string]::IsNullOrEmpty($ResourcePoolId)  ) { throw "Could not find Resource Poool ID for $ResourcePoolName " }
         }
+        
 
         #BROKEN
         #$ServiceProfileID = Get-ZertoServiceProfile -ZertoToken $ZertoToken  | `
@@ -4917,8 +4996,10 @@
         if ($ClusterName) {
             if ( $ClusterID.Count -gt 1 ) { throw "More than one Cluster ID has the name $ClusterName " }
         } elseif ($HostName) {
-            if ( $HostID.Count -gt 1 ) { throw "More than one Host ID has the name $HostName  " }
-        }    
+            if ( $HostID.Count -gt 1 ) { throw "More than one Host ID has the name $HostName  " }        
+        } elseif ($ResourcePoolName) {
+            if ( $ResourcePoolId.Count -gt 1 ) { throw "More than one Host ID has the name $HostName  " }
+        }   
         
         if ($DatastoreName) {
             if ( $DatastoreID.Count -gt 1 ) { throw "More than one Datastore ID has the name $DatastoreName " }
@@ -4938,25 +5019,34 @@
         $NewBodyHash = [ordered] @{}
         $NewBodyHash.Add('Backup' , $null)
         $Basic = [ordered] @{}
-            $Basic.Add( 'JournalHistoryInHours', $JournalHistoryInHours)
-            $Basic.Add( 'Name', $VPGName)
-            $Basic.Add( 'Priority', $Priority.ToString() )
-            $Basic.Add( 'ProtectedSiteIdentifier', $LocalSiteID)
-            $Basic.Add( 'RecoverySiteIdentifier', $RecoverySiteID )
-            $Basic.Add( 'RpoInSeconds', $RPOAlertInSeconds)
+        $Basic.Add( 'JournalHistoryInHours', $JournalHistoryInHours)
+        $Basic.Add( 'Name', $VPGName)
+        $Basic.Add( 'Priority', $Priority.ToString() )
+        $Basic.Add( 'ProtectedSiteIdentifier', $LocalSiteID)
+        $Basic.Add( 'RecoverySiteIdentifier', $RecoverySiteID )
+        $Basic.Add( 'RpoInSeconds', $RPOAlertInSeconds)
+        If ($ServiceProfileID){
+            $Basic.Add( 'ServiceProfileIdentifier', $ServiceProfileID )
+        } else {
             $Basic.Add( 'ServiceProfileIdentifier', $null )
-            $Basic.Add( 'TestIntervalInMinutes', $TestIntervalInMinutes )
-            $Basic.Add( 'UseWanCompression', $true )
+        }        
+
+        $Basic.Add( 'TestIntervalInMinutes', $TestIntervalInMinutes )
+        $Basic.Add( 'UseWanCompression', $true )
+        If ($ZorgID){
+            $Basic.Add( 'ZorgIdentifier', $ZorgID )
+        } else {
             $Basic.Add( 'ZorgIdentifier', $null )
-            $NewBodyHash.Add('Basic' , $Basic)
+        }        
+        $NewBodyHash.Add('Basic' , $Basic)
         $BootGroupsItem = [ordered] @{}
-            $BootGroupsItem.Add( 'BootDelayInSeconds', 0)
-            $BootGroupsItem.Add( 'BootGroupIdentifier', '00000000-0000-0000-0000-000000000000')
-            $BootGroupsItem.Add( 'Name', 'Default')
-            $BootGroupsArray = @()
-            $BootGroupsArray += $BootGroupsItem
-            $BootGroups= @{'BootGroups' = $BootGroupsArray }
-            $NewBodyHash.Add('BootGroups' , $BootGroups )
+        $BootGroupsItem.Add( 'BootDelayInSeconds', 0)
+        $BootGroupsItem.Add( 'BootGroupIdentifier', '00000000-0000-0000-0000-000000000000')
+        $BootGroupsItem.Add( 'Name', 'Default')
+        $BootGroupsArray = @()
+        $BootGroupsArray += $BootGroupsItem
+        $BootGroups= @{'BootGroups' = $BootGroupsArray }
+        $NewBodyHash.Add('BootGroups' , $BootGroups )
         $Journal = [ordered] @{}
             if ($JournalUseDefault) {
                 #Use the defaults
@@ -4971,10 +5061,10 @@
                 #$Journal.Add( 'DatastoreIdentifier', $null)
             } else {
                 if ($JournalDatastoreID) {
-                    $Journal.Add( 'DatastoreClusterIdentifier', $null)
+                    #$Journal.Add( 'DatastoreClusterIdentifier', $null)
                     $Journal.Add( 'DatastoreIdentifier', $JournalDatastoreID)
                 } else {
-                    $Journal.Add( 'DatastoreClusterIdentifier', $JournalDatastoreClusterID)
+                    #$Journal.Add( 'DatastoreClusterIdentifier', $JournalDatastoreClusterID)
                     $Journal.Add( 'DatastoreIdentifier', $null)
                 }
             }
@@ -5017,23 +5107,28 @@
             if ($ClusterID) {
                 $Recovery.Add( 'DefaultHostClusterIdentifier', $ClusterID)
                 $Recovery.Add( 'DefaultHostIdentifier', $null)
+            }
+            elseif ($ResourcePoolId){
+                $Recovery.Add( 'ResourcePoolIdentifier', $ResourcePoolId)
+                $Recovery.Add( 'DefaultHostIdentifier', $null)
+                $Recovery.Add( 'DefaultHostClusterIdentifier', $null)
             } else {
                 $Recovery.Add( 'DefaultHostClusterIdentifier', $null)
                 $Recovery.Add( 'DefaultHostIdentifier', $HostID)
             }
-            $Recovery.Add( 'ResourcePoolIdentifier', $null)
+            
             $NewBodyHash.Add( 'Recovery' , $Recovery )
         $Scripting = [ordered] @{}
             $Scripting.Add( 'PostBackup', $null)
-                $PostRecovery = [ordered] @{}
-                $PostRecovery.Add( 'Command', $null)
+                $PostRecovery = [ordered] @{}                
+                $PostRecovery.Add( 'Command', $PostRecoveryScript)
                 $PostRecovery.Add( 'Parameters', $null)
-                $PostRecovery.Add( 'TimeoutInSeconds', 0)
+                $PostRecovery.Add( 'TimeoutInSeconds', $PostRecoveryScriptTimeOut)
             $Scripting.Add( 'PostRecovery', $PostRecovery)
                 $PreRecovery = [ordered] @{}
-                $PreRecovery.Add( 'Command', $null)
+                $PreRecovery.Add( 'Command', $PreRecoveryScript)
                 $PreRecovery.Add( 'Parameters', $null)
-                $PreRecovery.Add( 'TimeoutInSeconds', 0)
+                $PreRecovery.Add( 'TimeoutInSeconds', $PreRecoveryScriptTimeOut)
             $Scripting.Add( 'PreRecovery', $PreRecovery)               
             $NewBodyHash.Add( 'Scripting' , $Scripting )
         $VMArray= @()
@@ -5658,6 +5753,40 @@
             [Parameter(Mandatory=$false, ValueFromPipeline=$true, HelpMessage = 'Zerto authentication token from Get-ZertoAuthToken or ENV:\ZertoToken')] [Hashtable] $ZertoToken = ( Get-EnvZertoToken ),
             [Parameter(Mandatory=$true, HelpMessage = 'Zerto VPG Settings Identifier')] [string] $ZertoVpgSettingsIdentifier,
             [Parameter(Mandatory=$true, HelpMessage = 'Zerto VPG Settings obejct')] [ZertoVPGSetting] $ZertoVPGSetting
+        )
+
+        $baseURL = "https://" + $ZertoServer + ":"+$ZertoPort+"/v1/"
+        $TypeJSON = "application/json"
+
+        if ( $ZertoToken -eq $null) {
+            throw "Missing Zerto Authentication Token"
+        }
+
+        if ([string]::IsNullOrEmpty($ZertoVpgSettingsIdentifier)  ) {
+            throw "Missing Zerto VPG Settings Identifier"
+        }
+
+        $FullURL = $baseURL + "vpgSettings/" + $ZertoVpgSettingsIdentifier
+        Write-Verbose $FullURL
+        $Body = $ZertoVPGSetting | Remove-Null | ConvertTo-Json -Depth 99
+        Write-Verbose $Body
+
+        try {
+            $Result = Invoke-RestMethod -Uri $FullURL -TimeoutSec 100 -Headers $ZertoToken -ContentType $TypeJSON -Method PUT -Body $Body 
+        } catch {
+            Test-RESTError -err $_
+        }
+        return $Result 
+    }
+
+    Function Set-ZertoVPGSettingJson {
+        [CmdletBinding()]
+        param(
+            [Parameter(Mandatory=$false, HelpMessage = 'Zerto Server or ENV:\ZertoServer')] [string] $ZertoServer = ( Get-EnvZertoServer )  ,
+            [Parameter(Mandatory=$false, HelpMessage = 'Zerto Server URL Port')] [string] $ZertoPort = ( Get-EnvZertoPort ),
+            [Parameter(Mandatory=$false, ValueFromPipeline=$true, HelpMessage = 'Zerto authentication token from Get-ZertoAuthToken or ENV:\ZertoToken')] [Hashtable] $ZertoToken = ( Get-EnvZertoToken ),
+            [Parameter(Mandatory=$true, HelpMessage = 'Zerto VPG Settings Identifier')] [string] $ZertoVpgSettingsIdentifier,
+            [Parameter(Mandatory=$true, HelpMessage = 'Zerto VPG Settings obejct')] [PSObject] $ZertoVPGSetting
         )
 
         $baseURL = "https://" + $ZertoServer + ":"+$ZertoPort+"/v1/"
@@ -7029,6 +7158,45 @@
         }
         return $Result
     }
+
+    Function Remove-Null 
+    {
+    [cmdletbinding()]
+    param(
+            # Object to remove null values from
+            [parameter(ValueFromPipeline,Mandatory)]
+            [object]$InputObject,        
+            [switch]$recurse
+        )
+        
+        If (-not $recurse.IsPresent)
+        {
+            $NewObject = $InputObject.PsObject.Copy()
+        }
+        else
+        {
+            $NewObject  = $InputObject
+        }
+
+
+        foreach ($Item in $NewObject.psObject.Properties)
+        {
+            If ($($Item.TypeNameOfValue) -in ("System.Management.Automation.PSCustomObject","System.Object[]"))
+            {
+                $NewObject.$($Item.Name) | Remove-Null2 -recurse | Out-Null
+            }
+            else
+            {
+                If ($Item.Value -eq $null)
+                {
+                    $NewObject.psObject.Properties.remove($Item.name)
+                }
+            }
+        }
+
+        $NewObject
+    }
+
 #endregion
 
 # $PrivateFunctions = @('Set-SSLCertByPass', 'Get-QueryStringFromHashTable', 'Parse-ZertoDate', `
