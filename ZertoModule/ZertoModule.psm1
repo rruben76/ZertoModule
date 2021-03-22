@@ -1766,10 +1766,7 @@
             
             Add-Type -TypeDefinition $type -ErrorAction SilentlyContinue
 
-        } catch {
-            If ($Error[0].Exception -ne "Cannot add type. The type name 'TrustAllCertsPolicy' already exists.") {
-                Write-Debug $Error[0]
-            } 
+        } catch {            
         }
         [System.Net.ServicePointManager]::CertificatePolicy = New-Object TrustAllCertsPolicy
     }
@@ -1949,10 +1946,15 @@
             Remove-Item ENV:ZertoVersion -Force -ErrorAction Ignore
 
             # Authenticating with Zerto APIs - Basic AUTH over SSL
-            $authInfo = ("{0}\{1}:{2}" -f  $cred.GetNetworkCredential().domain ,  $cred.GetNetworkCredential().UserName,  $cred.GetNetworkCredential().Password )
 
-            Write-Verbose $authInfo
-
+            If ($cred.GetNetworkCredential().domain)
+            {
+                $authInfo = ("{0}\{1}:{2}" -f  $cred.GetNetworkCredential().domain ,  $cred.GetNetworkCredential().UserName,  $cred.GetNetworkCredential().Password )
+            }
+            else
+            {
+                $authInfo = ("{0}:{1}" -f  $cred.GetNetworkCredential().UserName,  $cred.GetNetworkCredential().Password )
+            }            
             $authInfo = [System.Text.Encoding]::UTF8.GetBytes($authInfo)            
             $authInfo = [System.Convert]::ToBase64String($authInfo)
 
@@ -5017,21 +5019,76 @@
 
         #Build up our json object
         $NewBodyHash = [ordered] @{}
-        $NewBodyHash.Add('Backup' , $null)
-        $Basic = [ordered] @{}
-        $Basic.Add( 'JournalHistoryInHours', $JournalHistoryInHours)
+        #$NewBodyHash.Add('Backup' , $null)
+        $Basic = [ordered] @{}        
         $Basic.Add( 'Name', $VPGName)
         $Basic.Add( 'Priority', $Priority.ToString() )
         $Basic.Add( 'ProtectedSiteIdentifier', $LocalSiteID)
-        $Basic.Add( 'RecoverySiteIdentifier', $RecoverySiteID )
-        $Basic.Add( 'RpoInSeconds', $RPOAlertInSeconds)
+        $Basic.Add( 'RecoverySiteIdentifier', $RecoverySiteID )        
+        
+
         If ($ServiceProfileID){
-            $Basic.Add( 'ServiceProfileIdentifier', $ServiceProfileID )
+            If ($ServiceProfileID -eq "11111111-1111-1111-1111-111111111111")
+            {
+                $Basic.Add( 'ServiceProfileIdentifier', $ServiceProfileID )
+                $Basic.Add( 'RpoInSeconds', $RPOAlertInSeconds)
+                $Basic.Add( 'JournalHistoryInHours', $JournalHistoryInHours)
+                $Basic.Add( 'TestIntervalInMinutes', $TestIntervalInMinutes )
+
+                $Journal = [ordered] @{}
+                if ($JournalUseDefault) {
+                    #Use the defaults
+                    #if ($DatastoreID) {
+                    #    $Journal.Add( 'DatastoreClusterIdentifier', $null)
+                    #    $Journal.Add( 'DatastoreIdentifier', $DatastoreID)
+                    #} else {
+                    #    $Journal.Add( 'DatastoreClusterIdentifier', $DatastoreClusterID)
+                    #    $Journal.Add( 'DatastoreIdentifier', $null)
+                    #}
+                    #$Journal.Add( 'DatastoreClusterIdentifier', $null)
+                    #$Journal.Add( 'DatastoreIdentifier', $null)
+                } else {
+                    if ($JournalDatastoreID) {                        
+                        $Journal.Add( 'DatastoreIdentifier', $JournalDatastoreID)
+                    } else {                        
+                        $Journal.Add( 'DatastoreIdentifier', $null)
+                    }
+
+                    if ($DatastoreClusterID)
+                    {
+                        #$Journal.Add('DatastoreClusterIdentifier', $DatastoreClusterID)
+                        #$Journal.Add('DatastoreClusterIdentifier', $null)
+                    }
+                    else {                    
+                        #$Journal.Add('DatastoreClusterIdentifier', $null)
+                    }
+                }
+                $JournalLimit = [ordered] @{}
+                #This should allow the %, but currently not a parameter
+                if ($JournalHardLimitMB -gt 0) {
+                    $JournalLimit.Add( 'HardLimitInMB', $JournalHardLimitMB )
+                    $JournalLimit.Add( 'HardLimitInPercent', $null )
+                } else {
+                    $JournalLimit.Add( 'HardLimitInMB', $JournalHardLimitMB )
+                    $JournalLimit.Add( 'HardLimitInPercent', $null )
+                }
+                $JournalLimit.Add( 'WarningThresholdInMB', $JournalWarningThresholdMB )
+                $JournalLimit.Add( 'WarningThresholdInPercent', $null )
+                $Journal.Add( 'Limitation', $JournalLimit)
+                $NewBodyHash.Add('Journal' , $Journal )
+            }
+            else {
+                $Basic.Add( 'ServiceProfileIdentifier', $ServiceProfileID )
+                $Basic.Add( 'RpoInSeconds', $null)
+                $Basic.Add( 'JournalHistoryInHours', $null)
+                $Basic.Add( 'TestIntervalInMinutes', $null)
+            }                            
         } else {
             $Basic.Add( 'ServiceProfileIdentifier', $null )
+
         }        
 
-        $Basic.Add( 'TestIntervalInMinutes', $TestIntervalInMinutes )
+        
         $Basic.Add( 'UseWanCompression', $true )
         If ($ZorgID){
             $Basic.Add( 'ZorgIdentifier', $ZorgID )
@@ -5047,40 +5104,7 @@
         $BootGroupsArray += $BootGroupsItem
         $BootGroups= @{'BootGroups' = $BootGroupsArray }
         $NewBodyHash.Add('BootGroups' , $BootGroups )
-        $Journal = [ordered] @{}
-            if ($JournalUseDefault) {
-                #Use the defaults
-                #if ($DatastoreID) {
-                #    $Journal.Add( 'DatastoreClusterIdentifier', $null)
-                #    $Journal.Add( 'DatastoreIdentifier', $DatastoreID)
-                #} else {
-                #    $Journal.Add( 'DatastoreClusterIdentifier', $DatastoreClusterID)
-                #    $Journal.Add( 'DatastoreIdentifier', $null)
-                #}
-                #$Journal.Add( 'DatastoreClusterIdentifier', $null)
-                #$Journal.Add( 'DatastoreIdentifier', $null)
-            } else {
-                if ($JournalDatastoreID) {
-                    #$Journal.Add( 'DatastoreClusterIdentifier', $null)
-                    $Journal.Add( 'DatastoreIdentifier', $JournalDatastoreID)
-                } else {
-                    #$Journal.Add( 'DatastoreClusterIdentifier', $JournalDatastoreClusterID)
-                    $Journal.Add( 'DatastoreIdentifier', $null)
-                }
-            }
-            $JournalLimit = [ordered] @{}
-            #This should allow the %, but currently not a parameter
-            if ($JournalHardLimitMB -gt 0) {
-                $JournalLimit.Add( 'HardLimitInMB', $JournalHardLimitMB )
-                $JournalLimit.Add( 'HardLimitInPercent', $null )
-            } else {
-                $JournalLimit.Add( 'HardLimitInMB', $JournalHardLimitMB )
-                $JournalLimit.Add( 'HardLimitInPercent', $null )
-            }
-            $JournalLimit.Add( 'WarningThresholdInMB', $JournalWarningThresholdMB )
-            $JournalLimit.Add( 'WarningThresholdInPercent', $null )
-            $Journal.Add( 'Limitation', $JournalLimit)
-            $NewBodyHash.Add('Journal' , $Journal )
+       
         $Networks = [ordered] @{}
                 $Failover = [ordered] @{}
                     $DefaultNetworkIdentifier = [ordered] @{}
@@ -5094,13 +5118,10 @@
             $Networks.Add( 'FailoverTest', $FailoverTest)
             $NewBodyHash.Add('Networks' , $Networks )
         $Recovery = [ordered] @{}
-            if ($DatastoreID) {
-                #$Recovery.Add( 'DefaultDatastoreClusterIdentifier', $null)
+            if ($DatastoreID) {                
                 $Recovery.Add( 'DefaultDatastoreIdentifier', $DatastoreID)
-            } else {
-                #### NOTE THIS IS BROKEN 
-                #$Recovery.Add( 'DefaultDatastoreClusterIdentifier', $DatastoreClusterID) 
-                $Recovery.Add( 'DefaultDatastoreClusterIdentifier', $null)
+            } else {                
+                $Recovery.Add( 'DefaultDatastoreClusterIdentifier', $DatastoreClusterID)                 
                 $Recovery.Add( 'DefaultDatastoreIdentifier', $null)
             }
             $Recovery.Add( 'DefaultFolderIdentifier', $FolderID)
