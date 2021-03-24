@@ -4843,10 +4843,6 @@
             [Parameter(Mandatory=$false, HelpMessage = 'Zerto Post-Recovery Script')] [string] $PostRecoveryScript,
             [Parameter(Mandatory=$false, HelpMessage = 'Zerto Post-Recovery Script Timeout')] [int] $PostRecoveryScriptTimeOut =0,
             [Parameter(Mandatory=$false, HelpMessage = 'Zerto Pre-Recovery Script Timeout')] [int] $PreRecoveryScriptTimeOut =0,
-
-            
-            
-
             [Parameter(Mandatory=$true, ParameterSetName="VMNames", HelpMessage = 'Zerto Virtual Machine names')] [string[]] $VmNames,
             [Parameter(Mandatory=$true, ParameterSetName="VMClass", HelpMessage = 'Zerto VPG Virtual Machine class')] [VPGVirtualMachine[]] $VPGVirtualMachines
 
@@ -5085,7 +5081,9 @@
             }                            
         } else {
             $Basic.Add( 'ServiceProfileIdentifier', $null )
-
+            $Basic.Add( 'RpoInSeconds', $null)
+            $Basic.Add( 'JournalHistoryInHours', $null)
+            $Basic.Add( 'TestIntervalInMinutes', $null)
         }        
 
         
