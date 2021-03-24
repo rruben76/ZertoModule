@@ -5081,9 +5081,9 @@
             }                            
         } else {
             $Basic.Add( 'ServiceProfileIdentifier', $null )
-            $Basic.Add( 'RpoInSeconds', $null)
-            $Basic.Add( 'JournalHistoryInHours', $null)
-            $Basic.Add( 'TestIntervalInMinutes', $null)
+            $Basic.Add( 'RpoInSeconds', $RPOAlertInSeconds)
+            $Basic.Add( 'JournalHistoryInHours', $JournalHistoryInHours)
+            $Basic.Add( 'TestIntervalInMinutes', $TestIntervalInMinutes )
         }        
 
         
