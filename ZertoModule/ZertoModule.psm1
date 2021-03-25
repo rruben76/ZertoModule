@@ -5033,74 +5033,7 @@
                 $Basic.Add( 'ServiceProfileIdentifier', $ServiceProfileID )
                 $Basic.Add( 'RpoInSeconds', $RPOAlertInSeconds)
                 $Basic.Add( 'JournalHistoryInHours', $JournalHistoryInHours)
-                $Basic.Add( 'TestIntervalInMinutes', $TestIntervalInMinutes )
-
-                $Journal = [ordered] @{}
-                if ($JournalUseDefault) {
-                    #Use the defaults
-                    #if ($DatastoreID) {
-                    #    $Journal.Add( 'DatastoreClusterIdentifier', $null)
-                    #    $Journal.Add( 'DatastoreIdentifier', $DatastoreID)
-                    #} else {
-                    #    $Journal.Add( 'DatastoreClusterIdentifier', $DatastoreClusterID)
-                    #    $Journal.Add( 'DatastoreIdentifier', $null)
-                    #}
-                    #$Journal.Add( 'DatastoreClusterIdentifier', $null)
-                    #$Journal.Add( 'DatastoreIdentifier', $null)
-                } else {
-                    if ($JournalDatastoreID) {                        
-                        $Journal.Add( 'DatastoreIdentifier', $JournalDatastoreID)
-                    } else {                        
-                        $Journal.Add( 'DatastoreIdentifier', $null)
-                    }
-
-                    if ($DatastoreClusterID)
-                    {
-                        #$Journal.Add('DatastoreClusterIdentifier', $DatastoreClusterID)
-                        #$Journal.Add('DatastoreClusterIdentifier', $null)
-                    }
-                    else {                    
-                        #$Journal.Add('DatastoreClusterIdentifier', $null)
-                    }
-                }
-                $JournalLimit = [ordered] @{}
-                #This should allow the %, but currently not a parameter
-
-                if ($HardLimitInPercent -gt 0) {
-                {
-                    if ( ($HardLimitInPercent -lt 0) -or ($HardLimitInPercent -gt 100 ) ) { throw "HardLimitInPercent must be between 0 and 100  - '$HardLimitInPercent'"}
-                    else { 
-                        $JournalLimit.Add( 'HardLimitInPercent', $HardLimitInPercent ) 
-                        $JournalLimit.Add( 'HardLimitInMB', $null)
-                    }
-                }
-                else {
-                    if ( $JournalHardLimitMB -lt 0 ) { throw "HardLimitInMB must be greather then 0 - '$JournalHardLimitMB'"}
-                    else { 
-                        $JournalLimit.Add( 'HardLimitInMB', $JournalHardLimitMB )
-                        $JournalLimit.Add( 'HardLimitInPercent', $null)
-                    }                   
-                }
-                
-                if ($WarningThresholdInPercent -gt 0) {
-                    if ( ($WarningThresholdInPercent -lt 0) -or ($WarningThresholdInPercent -gt 100 ) ) { throw "WarningThresholdInPercent must be between 0 and 100  - '$WarningThresholdInPercent'"}
-                    else { 
-                        $JournalLimit.Add( 'WarningThresholdInPercent', $WarningThresholdInPercent ) 
-                        $JournalLimit.Add( 'WarningThresholdInMB', $null ) 
-                    }               
-                }
-                else
-                {
-                    if ( $JournalWarningThresholdMB -lt 0 ) { throw "WarningThresholdInMB must be greather then 0 - '$JournalWarningThresholdMB'"}
-                    else { 
-                        $JournalLimit.Add( 'WarningThresholdInMB', $JournalWarningThresholdMB ) 
-                        $JournalLimit.Add( 'WarningThresholdInPercent', $null) 
-                    }
-                    
-                }
-
-                $Journal.Add( 'Limitation', $JournalLimit)
-                $NewBodyHash.Add('Journal' , $Journal )
+                $Basic.Add( 'TestIntervalInMinutes', $TestIntervalInMinutes )             
             }
             else {
                 $Basic.Add( 'ServiceProfileIdentifier', $ServiceProfileID )
@@ -5113,8 +5046,62 @@
             $Basic.Add( 'RpoInSeconds', $RPOAlertInSeconds)
             $Basic.Add( 'JournalHistoryInHours', $JournalHistoryInHours)
             $Basic.Add( 'TestIntervalInMinutes', $TestIntervalInMinutes )
-        }        
+        } 
+        
+        $Journal = [ordered] @{}
+        if ($JournalUseDefault) {
+        } else {
+            if ($JournalDatastoreID) {                        
+                $Journal.Add( 'DatastoreIdentifier', $JournalDatastoreID)
+            } else {                        
+                $Journal.Add( 'DatastoreIdentifier', $null)
+            }
 
+            if ($DatastoreClusterID)
+            {
+                #$Journal.Add('DatastoreClusterIdentifier', $DatastoreClusterID)
+                #$Journal.Add('DatastoreClusterIdentifier', $null)
+            }
+            else {                    
+                #$Journal.Add('DatastoreClusterIdentifier', $null)
+            }
+        }
+        $JournalLimit = [ordered] @{}
+        #This should allow the %, but currently not a parameter
+
+        if ($HardLimitInPercent -gt 0) {                                
+            if ( ($HardLimitInPercent -lt 0) -or ($HardLimitInPercent -gt 100 ) ) { throw "HardLimitInPercent must be between 0 and 100  - '$HardLimitInPercent'"}
+            else { 
+                $JournalLimit.Add( 'HardLimitInPercent', $HardLimitInPercent ) 
+                $JournalLimit.Add( 'HardLimitInMB', $null)
+            }
+        }
+        else {
+            if ( $JournalHardLimitMB -lt 0 ) { throw "HardLimitInMB must be greather then 0 - '$JournalHardLimitMB'"}
+            else { 
+                $JournalLimit.Add( 'HardLimitInMB', $JournalHardLimitMB )
+                $JournalLimit.Add( 'HardLimitInPercent', $null)
+            }                   
+        }
+        
+        if ($WarningThresholdInPercent -gt 0) {
+            if ( ($WarningThresholdInPercent -lt 0) -or ($WarningThresholdInPercent -gt 100 ) ) { throw "WarningThresholdInPercent must be between 0 and 100  - '$WarningThresholdInPercent'"}
+            else { 
+                $JournalLimit.Add( 'WarningThresholdInPercent', $WarningThresholdInPercent ) 
+                $JournalLimit.Add( 'WarningThresholdInMB', $null ) 
+            }               
+        }
+        else
+        {
+            if ( $JournalWarningThresholdMB -lt 0 ) { throw "WarningThresholdInMB must be greather then 0 - '$JournalWarningThresholdMB'"}
+            else { 
+                $JournalLimit.Add( 'WarningThresholdInMB', $JournalWarningThresholdMB ) 
+                $JournalLimit.Add( 'WarningThresholdInPercent', $null) 
+            }            
+        }
+
+        $Journal.Add( 'Limitation', $JournalLimit)
+        $NewBodyHash.Add('Journal' , $Journal )
         
         $Basic.Add( 'UseWanCompression', $UseWanCompression )
         If ($ZorgID){
