@@ -4844,10 +4844,14 @@
             [Parameter(Mandatory=$false, HelpMessage = 'Zerto Post-Recovery Script Timeout')] [int] $PostRecoveryScriptTimeOut =0,
             [Parameter(Mandatory=$false, HelpMessage = 'Zerto Pre-Recovery Script Timeout')] [int] $PreRecoveryScriptTimeOut =0,
             [Parameter(Mandatory=$true, ParameterSetName="VMNames", HelpMessage = 'Zerto Virtual Machine names')] [string[]] $VmNames,
-            [Parameter(Mandatory=$true, ParameterSetName="VMClass", HelpMessage = 'Zerto VPG Virtual Machine class')] [VPGVirtualMachine[]] $VPGVirtualMachines
+            [Parameter(Mandatory=$true, ParameterSetName="VMClass", HelpMessage = 'Zerto VPG Virtual Machine class')] [VPGVirtualMachine[]] $VPGVirtualMachines,
 
-            ,[Parameter(Mandatory=$false, HelpMessage = 'Commit this Zerto VPG')] [bool] $VPGCommit = $true
-            ,[Parameter(Mandatory=$false, HelpMessage = 'Dump Json without posting for debug')] [switch] $DumpJson
+            [Parameter(Mandatory=$false, HelpMessage = 'Commit this Zerto VPG')] [bool] $VPGCommit = $true,
+            [Parameter(Mandatory=$false, HelpMessage = 'Dump Json without posting for debug')] [switch] $DumpJson,
+
+            [Parameter(Mandatory=$false, HelpMessage  = 'Use Wan Compression')] [Boolean] $UseWanCompression = $true, 
+            [Parameter(Mandatory=$false, HelpMessage  = 'HardLimitInPercent')] [int] $HardLimitInPercent,
+            [Parameter(Mandatory=$false, HelpMessage  = 'WarningThresholdInPercent')] [int] $WarningThresholdInPercent
         )
 
         $baseURL = "https://" + $ZertoServer + ":"+$ZertoPort+"/v1/"
@@ -5061,15 +5065,19 @@
                 }
                 $JournalLimit = [ordered] @{}
                 #This should allow the %, but currently not a parameter
-                if ($JournalHardLimitMB -gt 0) {
-                    $JournalLimit.Add( 'HardLimitInMB', $JournalHardLimitMB )
-                    $JournalLimit.Add( 'HardLimitInPercent', $null )
-                } else {
-                    $JournalLimit.Add( 'HardLimitInMB', $JournalHardLimitMB )
-                    $JournalLimit.Add( 'HardLimitInPercent', $null )
-                }
-                $JournalLimit.Add( 'WarningThresholdInMB', $JournalWarningThresholdMB )
-                $JournalLimit.Add( 'WarningThresholdInPercent', $null )
+                if ( $JournalHardLimitMB -lt 0 ) { throw "HardLimitInMB must be greather then 0 - '$JournalHardLimitMB'"}
+                else { $JournalLimit.Add( 'HardLimitInMB', $JournalHardLimitMB ) }
+
+                if ( ($HardLimitInPercent -lt 0) -or ($HardLimitInPercent -gt 100 ) ) { throw "HardLimitInPercent must be between 0 and 100  - '$HardLimitInPercent'"}
+                else { $JournalLimit.Add( 'HardLimitInPercent', $HardLimitInPercent ) }
+
+                if ( $JournalWarningThresholdMB -lt 0 ) { throw "WarningThresholdInMB must be greather then 0 - '$JournalWarningThresholdMB'"}
+                else { $JournalLimit.Add( 'WarningThresholdInMB', $JournalWarningThresholdMB ) }
+                
+                if ( ($WarningThresholdInPercent -lt 0) -or ($WarningThresholdInPercent -gt 100 ) ) { throw "WarningThresholdInPercent must be between 0 and 100  - '$WarningThresholdInPercent'"}
+                else { $JournalLimit.Add( 'WarningThresholdInPercent', $WarningThresholdInPercent ) }               
+
+
                 $Journal.Add( 'Limitation', $JournalLimit)
                 $NewBodyHash.Add('Journal' , $Journal )
             }
@@ -5087,7 +5095,7 @@
         }        
 
         
-        $Basic.Add( 'UseWanCompression', $true )
+        $Basic.Add( 'UseWanCompression', $UseWanCompression )
         If ($ZorgID){
             $Basic.Add( 'ZorgIdentifier', $ZorgID )
         } else {
